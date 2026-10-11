@@ -15,4 +15,4 @@ do
         --image-id "$AMI_ID" \
         --security-group-ids "$SECURITY_GROUP_ID" \
         --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$instance}]"
-done
+done  
