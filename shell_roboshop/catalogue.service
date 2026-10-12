@@ -1,12 +1,13 @@
 [Unit]
-Description=Catalogue Service
+Description=Cart Service
 
 [Service]
 User=roboshop
-Environment=MONGO=true
-Environment=MONGO_URL="mongodb://172.31.44.55:27017/catalogue"
+Environment=REDIS_HOST=172.31.41.91
+Environment=CATALOGUE_HOST=172.31.40.164
+Environment=CATALOGUE_PORT=8080
 ExecStart=/bin/node /app/server.js
-SyslogIdentifier=catalogue
+SyslogIdentifier=cart
 
 [Install]
 WantedBy=multi-user.target
