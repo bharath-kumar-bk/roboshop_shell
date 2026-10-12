@@ -7,8 +7,10 @@ Y="\e[33m"
 N="\e[0m"
 
 LOG_FOLDER="/var/log/roboshop-logs"
-SCRIPT_NAME=$(echo $0 | cut -d "." -f1)   # mysql.sh -> mysql
+SCRIPT_NAME=$(echo $0 | cut -d "." -f1)   # shipping.sh -> shipping
 LOG_FILE="$LOG_FOLDER/$SCRIPT_NAME.log"
+SCRIPT_DIR=$PWD                           # save this folder now; we cd into /app later
+MYSQL_HOST="172.31.36.154"                # private IP of the MySQL server
 MYSQL_ROOT_PASSWORD="RoboShop@1"
 
 mkdir -p $LOG_FOLDER
@@ -31,23 +33,65 @@ VALIDATE(){
     fi
 }
 
-dnf install maven -y
-useradd --system --home /app --shell /sbin/nologin --comment "roboshop system user" roboshop
+dnf install maven -y &>>$LOG_FILE
+VALIDATE $? "Installing Maven"
 
-mkdir /app 
+# useradd fails if the user already exists, so create it only when missing
+id roboshop &>>$LOG_FILE
+if [ $? -ne 0 ]
+then
+    useradd --system --home /app --shell /sbin/nologin --comment "roboshop system user" roboshop &>>$LOG_FILE
+    VALIDATE $? "Creating roboshop system user"
+else
+    echo -e "roboshop user already exists ... $Y SKIPPING $N" | tee -a $LOG_FILE
+fi
 
-curl -L -o /tmp/shipping.zip https://roboshop-artifacts.s3.amazonaws.com/shipping-v3.zip 
-cd /app 
-unzip /tmp/shipping.zip
+mkdir -p /app
+VALIDATE $? "Creating /app folder"
 
-cd /app 
-mvn clean package 
-mv target/shipping-1.0.jar shipping.jar
+curl -L -o /tmp/shipping.zip https://roboshop-artifacts.s3.amazonaws.com/shipping-v3.zip &>>$LOG_FILE
+VALIDATE $? "Downloading shipping code"
 
-mysql -h <MYSQL-SERVER-IPADDRESS> -uroot -pRoboShop@1 < /app/db/schema.sql
+cd /app
+unzip -o /tmp/shipping.zip &>>$LOG_FILE     # -o overwrites without asking, so re-runs don't hang
+VALIDATE $? "Unzipping shipping code"
 
-mysql -h <MYSQL-SERVER-IPADDRESS> -uroot -pRoboShop@1 < /app/db/app-user.sql 
+mvn clean package &>>$LOG_FILE
+VALIDATE $? "Building shipping with Maven"
 
-mysql -h <MYSQL-SERVER-IPADDRESS> -uroot -pRoboShop@1 < /app/db/master-data.sql
+mv target/shipping-1.0.jar shipping.jar &>>$LOG_FILE
+VALIDATE $? "Renaming jar file"
 
-systemctl restart shipping
+cp $SCRIPT_DIR/shipping.service /etc/systemd/system/shipping.service
+VALIDATE $? "Copying shipping service file"
+
+systemctl daemon-reload &>>$LOG_FILE
+VALIDATE $? "Reloading systemd"
+
+systemctl enable shipping &>>$LOG_FILE
+VALIDATE $? "Enabling shipping"
+
+systemctl start shipping &>>$LOG_FILE
+VALIDATE $? "Starting shipping"
+
+dnf install mysql -y &>>$LOG_FILE
+VALIDATE $? "Installing MySQL client"
+
+# Load the data only if the cities database doesn't exist yet
+mysql -h $MYSQL_HOST -uroot -p"$MYSQL_ROOT_PASSWORD" -e 'use cities' &>>$LOG_FILE
+if [ $? -ne 0 ]
+then
+    mysql -h $MYSQL_HOST -uroot -p"$MYSQL_ROOT_PASSWORD" < /app/db/schema.sql &>>$LOG_FILE
+    VALIDATE $? "Loading schema"
+
+    mysql -h $MYSQL_HOST -uroot -p"$MYSQL_ROOT_PASSWORD" < /app/db/app-user.sql &>>$LOG_FILE
+    VALIDATE $? "Creating app user"
+
+    mysql -h $MYSQL_HOST -uroot -p"$MYSQL_ROOT_PASSWORD" < /app/db/master-data.sql &>>$LOG_FILE
+    VALIDATE $? "Loading master data"
+else
+    echo -e "Shipping data already loaded ... $Y SKIPPING $N" | tee -a $LOG_FILE
+fi
+
+systemctl restart shipping &>>$LOG_FILE
+VALIDATE $? "Restarting shipping"
