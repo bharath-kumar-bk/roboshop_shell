@@ -42,7 +42,7 @@ VALIDATE $? "Importing Erlang signing key"
 rpm --import 'https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-server.9F4587F226208342.key' &>>$LOG_FILE
 VALIDATE $? "Importing RabbitMQ server signing key"
 
-cp $SCRIPT_DIR/rabbitmq.repo /etc/yum.repos.d/rabbitmq.repo
+cp $SCRIPT_DIR/RabbitMq.repo /etc/yum.repos.d/rabbitmq.repo
 VALIDATE $? "Adding RabbitMQ repo"
 
 dnf install erlang rabbitmq-server -y &>>$LOG_FILE
